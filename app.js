@@ -328,6 +328,7 @@ function render() {
   const s = streak();
   $("streak").innerHTML = s ? `<b>${s}</b>일 연속<br><span>자정 안에 다 함</span>` : `<span>연속 달성<br>아직 없음</span>`;
   renderSyncLine();
+  renderBrief();
   renderReports();
   renderTasks();
 }
@@ -344,8 +345,35 @@ function renderSyncLine(msg) {
   el.innerHTML = `우편함 확인 ${esc(when)}${pend ? ` · 보낼 결과 ${pend}일치 대기` : ""}${miss}`;
 }
 
+// 오늘 브리핑: 일정·브리핑팀(brief)이 올린 보고 중 이 날짜의 마지막 것을 맨 위에 크게 보여 줘요.
+// 브리핑은 날짜별로 저장돼서 ‹ › 로 지난 날 브리핑도 다시 볼 수 있어요.
+function renderBrief() {
+  const list = Object.values(data.reports).filter((r) => r.team === "brief" && r.date === viewDate).sort((a, b) => a.id.localeCompare(b.id));
+  const r = list[list.length - 1];
+  $("briefBox").hidden = !r;
+  if (!r) return;
+  $("briefTitle").textContent = viewDate === today() ? "오늘 브리핑" : "이날 브리핑";
+  $("briefMeta").textContent = r.title && r.title !== "아침 브리핑" ? r.title : "";
+  $("briefBody").innerHTML = simpleMarkdown(r.body);
+  const body = $("briefBody");
+  body.classList.add("collapsed");
+  $("briefMore").textContent = "전체 보기";
+  // 짧으면 '전체 보기' 버튼을 숨겨요
+  requestAnimationFrame(() => { $("briefMore").hidden = body.scrollHeight <= body.clientHeight + 4; });
+  if (!r.read) { r.read = true; saveData(); }
+}
+// 브리핑 글을 보기 좋게: "# 제목", "- 항목", **굵게** 정도만 알아들어요 (나머지는 글자 그대로)
+function simpleMarkdown(text) {
+  return String(text || "").split("\n").map((line) => {
+    let h = esc(line).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    if (/^#{1,6}\s/.test(line)) return `<div class="bh">${h.replace(/^#{1,6}\s/, "")}</div>`;
+    if (/^\s*[-•*]\s/.test(line)) return `<div class="bl">• ${h.replace(/^\s*[-•*]\s/, "")}</div>`;
+    return line.trim() ? `<div>${h}</div>` : `<div class="gap"></div>`;
+  }).join("");
+}
+
 function renderReports() {
-  const list = Object.values(data.reports).filter((r) => r.date === viewDate);
+  const list = Object.values(data.reports).filter((r) => r.date === viewDate && r.team !== "brief");
   $("reportsBox").hidden = !list.length;
   $("reports").innerHTML = list.map((r) => `
     <details class="report${r.read ? "" : " unread"}" data-report="${esc(r.id)}">
@@ -582,6 +610,10 @@ $("prevDay").onclick = () => { viewDate = shiftDate(viewDate, -1); render(); };
 $("nextDay").onclick = () => { if (viewDate < today()) { viewDate = shiftDate(viewDate, 1); render(); } };
 $("todayBtn").onclick = () => { viewDate = today(); render(); };
 $("syncBtn").onclick = () => sync(true);
+$("briefMore").onclick = () => {
+  const c = $("briefBody").classList.toggle("collapsed");
+  $("briefMore").textContent = c ? "전체 보기" : "접기";
+};
 $("settingsBtn").onclick = openSettings;
 $("fab").onclick = () => openPaste();
 

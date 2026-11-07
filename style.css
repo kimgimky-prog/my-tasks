@@ -39,6 +39,16 @@ h3{font-size:15px;margin:18px 0 4px}
 .datelabel{min-width:118px;text-align:center;font-weight:600;font-size:14px}
 .todaybtn{align-self:flex-start;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:999px;padding:4px 12px;font-size:13px}
 
+/* ---------- 오늘 브리핑 ---------- */
+.brief{background:var(--surface);border:1px solid var(--accent);border-radius:var(--r);padding:14px 16px}
+.briefhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.briefbody{font-size:14.5px;line-height:1.6}
+.briefbody.collapsed{max-height:15.5em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 75%,transparent);mask-image:linear-gradient(#000 75%,transparent)}
+.briefbody .bh{font-weight:700;margin-top:6px;color:var(--accent)}
+.briefbody .bl{padding-left:6px}
+.briefbody .gap{height:6px}
+#briefMore{margin-top:6px}
+
 /* ---------- 오늘 한눈에 ---------- */
 .readout{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
 .sumrow{display:flex;justify-content:space-between;align-items:flex-end}
