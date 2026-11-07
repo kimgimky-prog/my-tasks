@@ -453,8 +453,7 @@ function openSettings() {
     <p class="muted small">열쇠 만드는 곳: GitHub → Settings → Developer settings → Fine-grained tokens. 저장소는 my-tasks-data만, 권한은 Contents ‘Read and write’만 주세요.</p>
     <h3>알림</h3>
     <p class="muted">새 과제·보고·브리핑이 오면 폰으로 알려 주고, 밤 22:30에 안 한 과제가 남아 있으면 한 번 더 알려 줘요.</p>
-    <p class="muted small" id="pushState">${pushStateText()}</p>
-    <div class="row"><button class="btn" data-act="pushOn">${cfg.deviceId ? "알림 다시 등록" : "알림 켜기"}</button></div>
+    ${pushSectionHtml()}
     <h3>팀 보고 복사</h3>
     <p class="muted">우편함이 안 될 때, 보고 있는 날의 결과를 한 줄씩 복사해서 붙여넣을 수 있어요.</p>
     <button class="btn" data-act="copyReport">${esc(dateLabel(viewDate))} 결과 복사</button>
@@ -542,12 +541,16 @@ document.addEventListener("click", async (ev) => {
     } catch (e) {
       b.disabled = false; b.textContent = "연결하기"; toast(e.message);
     }
+  } else if (act === "pushPrep") {
+    if (!cfg.token) { toast("먼저 위에서 우편함을 연결해 주세요."); return; }
+    await makePushKeys(); openSettings();
+  } else if (act === "copyPriv") {
+    try { await navigator.clipboard.writeText(cfg.vapidPriv); toast("복사했어요. GitHub 비밀값에 붙여넣으세요."); }
+    catch { $("vapidPriv").select(); toast("칸을 길게 눌러 복사해 주세요."); }
   } else if (act === "pushOn") {
-    b.disabled = true;
-    try { await enablePush(); toast("알림을 켰어요. 잠시 뒤 시험 알림이 와요."); }
-    catch (e) { toast(e.message); }
-    b.disabled = false;
-    const st = $("pushState"); if (st) st.textContent = pushStateText();
+    b.disabled = true; b.textContent = "켜는 중…";
+    try { await enablePush(); openSettings(); toast("알림을 켰어요. 1~2분 안에 시험 알림이 와요."); }
+    catch (e) { b.disabled = false; b.textContent = "비밀값 넣었어요 → 알림 켜기"; toast(e.message); }
   } else if (act === "cfgClear") {
     cfg.token = ""; saveCfg(); closeSheet(); render(); toast("연결을 끊었어요. 열쇠를 폰에서 지웠어요.");
   } else if (act === "copyReport") {
@@ -598,35 +601,61 @@ $("importInput").addEventListener("change", async (ev) => {
 // ---------------------------------------------------------------------
 // 8-1. 폰 알림 (웹 푸시)
 // ---------------------------------------------------------------------
-// 원리: ① 폰(크롬)이 '알림 받을 주소(구독 정보)'를 만들어 줘요.
-//       ② 앱이 그 주소를 우편함 devices/ 폴더에 적어요.
-//       ③ 팀이 우편함에 과제를 올리면, GitHub가 자동으로 그 주소로 알림을 보내요(우편함 저장소의 .github 폴더).
-// 아래 VAPID_PUBLIC은 '보내는 사람 확인용 공개 열쇠'라서 코드에 있어도 괜찮아요. (짝이 되는 비밀 열쇠는 비공개 우편함에만 있어요)
-const VAPID_PUBLIC = "BGX2rJADfiUjwHrXjtBX_dD6FSlwicFZCmwIPJd8NBhcx_B8rXMNY4Q81iuUBLkOeoeR-Ttt9Lh_D9WIxouLHWQ";
-
+// 원리: ① 앱이 이 폰 안에서 '보내는 사람 열쇠' 한 쌍(공개·비밀)을 만들어요.
+//       ② KY가 비밀 열쇠를 우편함 저장소의 Actions 비밀값(VAPID_PRIVATE_KEY)에 붙여넣어요. (코드·우편함 파일에는 안 넣어요)
+//       ③ 폰(크롬)이 '알림 받을 주소'를 만들고, 앱이 그 주소와 공개 열쇠를 우편함 devices/ 폴더에 적어요.
+//       ④ 팀이 우편함에 과제를 올리면 GitHub가 자동으로 그 주소로 알림을 보내요(우편함 저장소의 .github 폴더).
 function pushStateText() {
   if (!("Notification" in window) || !("PushManager" in window)) return "이 브라우저는 알림을 지원하지 않아요. 설치한 앱에서 열어 주세요.";
   if (Notification.permission === "denied") return "알림이 막혀 있어요. 폰 설정 → 애플리케이션 → 나의 과제 → 알림에서 허용해 주세요.";
-  if (cfg.deviceId && Notification.permission === "granted") return "알림 켜짐 ✓";
+  if (cfg.deviceId && cfg.vapidPub && Notification.permission === "granted") return "알림 켜짐 ✓";
   return "알림 꺼짐";
 }
+const bytesToB64url = (u8) => btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 function b64urlToBytes(s) {
   const pad = "=".repeat((4 - (s.length % 4)) % 4);
   const bin = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
+// ① 열쇠 한 쌍 만들기 (웹 브라우저에 들어 있는 암호 기능을 써요)
+async function makePushKeys() {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pub = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+  const jwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  cfg.vapidPub = bytesToB64url(pub);
+  cfg.vapidPriv = jwk.d;          // 비밀 열쇠: 알림을 켜고 나면 폰에서도 지워요
+  cfg.deviceId = "";
+  saveCfg();
+}
+// ③ 알림 켜기: 허용 받기 → 알림 받을 주소 만들기 → 우편함에 적기
 async function enablePush() {
   if (!cfg.token) throw new Error("먼저 위에서 우편함을 연결해 주세요.");
+  if (!cfg.vapidPub) throw new Error("먼저 ‘알림 준비하기’를 눌러 주세요.");
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("이 브라우저는 알림을 지원하지 않아요.");
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error("알림을 허용해야 켤 수 있어요.");
   const reg = await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription()) ||
-    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(VAPID_PUBLIC) }));
+  const old = await reg.pushManager.getSubscription();
+  if (old) await old.unsubscribe();   // 예전 열쇠로 만든 주소는 버리고 새로 만들어요
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(cfg.vapidPub) });
   cfg.deviceId ||= "phone-" + newId();
-  saveCfg();
   await Mailbox.writeFile(cfg, `devices/${cfg.deviceId}.json`,
-    JSON.stringify({ ...sub.toJSON(), addedAt: new Date().toISOString() }, null, 2), "나의 과제: 알림 받을 기기 등록");
+    JSON.stringify({ ...sub.toJSON(), vapidPublicKey: cfg.vapidPub, addedAt: new Date().toISOString() }, null, 2),
+    "나의 과제: 알림 받을 기기 등록");
+  delete cfg.vapidPriv;
+  saveCfg();
+}
+function pushSectionHtml() {
+  if (cfg.vapidPriv) {
+    return `<p class="muted small"><b>1.</b> 아래 비밀 열쇠를 복사하세요.</p>
+      <textarea class="in" id="vapidPriv" rows="2" readonly>${esc(cfg.vapidPriv)}</textarea>
+      <div class="row"><button class="btn small" data-act="copyPriv">비밀 열쇠 복사</button></div>
+      <p class="muted small"><b>2.</b> 크롬에서 <b>github.com/kimgimky-prog/my-tasks-data/settings/secrets/actions/new</b> 열기 → Name에 <b>VAPID_PRIVATE_KEY</b> → Secret에 붙여넣기 → Add secret</p>
+      <p class="muted small"><b>3.</b> 돌아와서 아래 버튼을 누르면 시험 알림이 와요. (비밀 열쇠는 그때 이 폰에서도 지워져요)</p>
+      <div class="row"><button class="btn primary" data-act="pushOn">비밀값 넣었어요 → 알림 켜기</button></div>`;
+  }
+  return `<p class="muted small" id="pushState">${pushStateText()}</p>
+    <div class="row"><button class="btn" data-act="pushPrep">${cfg.deviceId ? "알림 처음부터 다시 설정" : "알림 준비하기"}</button></div>`;
 }
 
 // ---------------------------------------------------------------------
