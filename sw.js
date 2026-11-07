@@ -4,7 +4,7 @@
 // ▶ 앱 파일을 고친 뒤에는 아래 VERSION 숫자를 하나 올려 주세요.
 //   그래야 폰에 보관된 옛날 파일 대신 새 파일을 받아요.
 // =====================================================================
-const VERSION = "mytasks-v3";
+const VERSION = "mytasks-v4";
 const FILES = [
   "./", "index.html", "style.css", "mailbox.js", "app.js",
   "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",
@@ -41,5 +41,33 @@ self.addEventListener("fetch", (event) => {
         return res;
       })
       .catch(() => caches.match(key).then((hit) => hit || caches.match("index.html")))
+  );
+});
+
+// ---------------------------------------------------------------------
+// 폰 알림: 우편함(GitHub)이 보낸 알림을 받아서 화면에 띄워요
+// 보내는 쪽 내용 모양: {"title": "...", "body": "...", "tag": "...", "url": "/my-tasks/"}
+// ---------------------------------------------------------------------
+self.addEventListener("push", (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(d.title || "나의 과제", {
+    body: d.body || "새 소식이 있어요.",
+    tag: d.tag || undefined,
+    icon: "icons/icon-192.png",
+    badge: "icons/icon-192.png",
+    data: { url: d.url || "./" },
+  }));
+});
+
+// 알림을 누르면 앱을 열어요 (이미 열려 있으면 그 창으로)
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || "./", self.registration.scope).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) if (c.url.startsWith(self.registration.scope)) return c.focus();
+      return self.clients.openWindow(url);
+    })
   );
 });

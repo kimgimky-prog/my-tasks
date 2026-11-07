@@ -47,6 +47,7 @@ function toast(msg) {
 
 // 팀 목록. 우편함 파일의 "team" 칸에는 아래 영어 이름(civil, philo)을 써요.
 const TEAMS = {
+  brief: { name: "일정·브리핑팀", label: "아침 브리핑" },
   civil: { name: "공무원학습팀", label: "산업기사 문제" },
   philo: { name: "철학·서적팀", label: "습관 임무" },
   etc:   { name: "기타", label: "기타 과제" },
@@ -54,6 +55,7 @@ const TEAMS = {
 // 팀 이름이 한글로 와도 알아듣게 바꿔요
 function teamKey(t) {
   const s = String(t || "").toLowerCase();
+  if (s === "brief" || s.includes("브리핑") || s.includes("매니저") || s.includes("일정")) return "brief";
   if (s === "civil" || s.includes("공무원")) return "civil";
   if (s === "philo" || s.includes("철학") || s.includes("서적")) return "philo";
   return "etc";
@@ -423,7 +425,7 @@ function openPaste(prefill = "") {
     <h2>과제 붙여넣기</h2>
     <p class="muted">카톡이나 문서에서 복사한 글을 그대로 붙여넣으세요. 카톡 메시지를 꾹 눌러 ‘공유’ → ‘나의 과제’를 골라도 여기로 와요.</p>
     <div class="seg" id="pasteTeam">
-      ${Object.entries(TEAMS).map(([k, v]) => `<button class="${k === guess ? "on" : ""}" data-team="${k}">${v.label}</button>`).join("")}
+      ${Object.entries(TEAMS).filter(([k]) => k !== "brief").map(([k, v]) => `<button class="${k === guess ? "on" : ""}" data-team="${k}">${v.label}</button>`).join("")}
     </div>
     <textarea class="in" id="pasteText" rows="8" placeholder="여기에 붙여넣기">${esc(prefill)}</textarea>
     <label class="label">날짜 <input class="in" type="date" id="pasteDate" value="${viewDate}" max="${today()}"></label>
@@ -449,6 +451,10 @@ function openSettings() {
     <label class="label">열쇠(토큰) <input class="in" id="cfgToken" type="password" value="${esc(cfg.token)}" placeholder="github_pat_로 시작" autocapitalize="off" autocomplete="off"></label>
     <div class="row"><button class="btn primary" data-act="cfgSave">${has ? "다시 연결" : "연결하기"}</button>${has ? `<button class="btn" data-act="cfgClear">연결 끊기</button>` : ""}</div>
     <p class="muted small">열쇠 만드는 곳: GitHub → Settings → Developer settings → Fine-grained tokens. 저장소는 my-tasks-data만, 권한은 Contents ‘Read and write’만 주세요.</p>
+    <h3>알림</h3>
+    <p class="muted">새 과제·보고·브리핑이 오면 폰으로 알려 주고, 밤 22:30에 안 한 과제가 남아 있으면 한 번 더 알려 줘요.</p>
+    <p class="muted small" id="pushState">${pushStateText()}</p>
+    <div class="row"><button class="btn" data-act="pushOn">${cfg.deviceId ? "알림 다시 등록" : "알림 켜기"}</button></div>
     <h3>팀 보고 복사</h3>
     <p class="muted">우편함이 안 될 때, 보고 있는 날의 결과를 한 줄씩 복사해서 붙여넣을 수 있어요.</p>
     <button class="btn" data-act="copyReport">${esc(dateLabel(viewDate))} 결과 복사</button>
@@ -536,6 +542,12 @@ document.addEventListener("click", async (ev) => {
     } catch (e) {
       b.disabled = false; b.textContent = "연결하기"; toast(e.message);
     }
+  } else if (act === "pushOn") {
+    b.disabled = true;
+    try { await enablePush(); toast("알림을 켰어요. 잠시 뒤 시험 알림이 와요."); }
+    catch (e) { toast(e.message); }
+    b.disabled = false;
+    const st = $("pushState"); if (st) st.textContent = pushStateText();
   } else if (act === "cfgClear") {
     cfg.token = ""; saveCfg(); closeSheet(); render(); toast("연결을 끊었어요. 열쇠를 폰에서 지웠어요.");
   } else if (act === "copyReport") {
@@ -582,6 +594,40 @@ $("importInput").addEventListener("change", async (ev) => {
     loadData(); closeSheet(); render(); toast("백업을 불러왔어요.");
   } catch { toast("나의 과제 백업 파일이 아니에요."); }
 });
+
+// ---------------------------------------------------------------------
+// 8-1. 폰 알림 (웹 푸시)
+// ---------------------------------------------------------------------
+// 원리: ① 폰(크롬)이 '알림 받을 주소(구독 정보)'를 만들어 줘요.
+//       ② 앱이 그 주소를 우편함 devices/ 폴더에 적어요.
+//       ③ 팀이 우편함에 과제를 올리면, GitHub가 자동으로 그 주소로 알림을 보내요(우편함 저장소의 .github 폴더).
+// 아래 VAPID_PUBLIC은 '보내는 사람 확인용 공개 열쇠'라서 코드에 있어도 괜찮아요. (짝이 되는 비밀 열쇠는 비공개 우편함에만 있어요)
+const VAPID_PUBLIC = "BGX2rJADfiUjwHrXjtBX_dD6FSlwicFZCmwIPJd8NBhcx_B8rXMNY4Q81iuUBLkOeoeR-Ttt9Lh_D9WIxouLHWQ";
+
+function pushStateText() {
+  if (!("Notification" in window) || !("PushManager" in window)) return "이 브라우저는 알림을 지원하지 않아요. 설치한 앱에서 열어 주세요.";
+  if (Notification.permission === "denied") return "알림이 막혀 있어요. 폰 설정 → 애플리케이션 → 나의 과제 → 알림에서 허용해 주세요.";
+  if (cfg.deviceId && Notification.permission === "granted") return "알림 켜짐 ✓";
+  return "알림 꺼짐";
+}
+function b64urlToBytes(s) {
+  const pad = "=".repeat((4 - (s.length % 4)) % 4);
+  const bin = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+async function enablePush() {
+  if (!cfg.token) throw new Error("먼저 위에서 우편함을 연결해 주세요.");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("이 브라우저는 알림을 지원하지 않아요.");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw new Error("알림을 허용해야 켤 수 있어요.");
+  const reg = await navigator.serviceWorker.ready;
+  const sub = (await reg.pushManager.getSubscription()) ||
+    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(VAPID_PUBLIC) }));
+  cfg.deviceId ||= "phone-" + newId();
+  saveCfg();
+  await Mailbox.writeFile(cfg, `devices/${cfg.deviceId}.json`,
+    JSON.stringify({ ...sub.toJSON(), addedAt: new Date().toISOString() }, null, 2), "나의 과제: 알림 받을 기기 등록");
+}
 
 // ---------------------------------------------------------------------
 // 9. 시작
