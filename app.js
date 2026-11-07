@@ -201,7 +201,7 @@ function importInbox(name, text) {
       kind: x.kind || (team === "philo" ? "habit" : "quiz"),
     };
   });
-  data.tasks[id] = { id, date, team, title: o.title || TEAMS[team].label, origin: "우편함", items };
+  data.tasks[id] = { id, date, team, title: o.title || TEAMS[team].label, origin: "우편함", items, folded: old?.folded };
   if (date < today()) finalizePastDays();
 }
 function blankItem() {
@@ -391,15 +391,28 @@ function renderTasks() {
   // 팀 순서: 공무원학습팀 → 철학·서적팀 → 기타
   const order = Object.keys(TEAMS);
   list.sort((a, b) => order.indexOf(a.team) - order.indexOf(b.team));
-  $("tasks").innerHTML = list.map((task) => `
-    <section class="card" data-task="${esc(task.id)}">
+  $("tasks").innerHTML = list.map((task) => {
+    // 접기: KY가 직접 접거나 펼친 건 그대로 기억하고, 정한 적 없으면 '다 했으면 접힘, 남았으면 펼침'
+    const doneN = task.items.filter((it) => it.done).length;
+    const folded = task.folded ?? (doneN === task.items.length);
+    return `
+    <section class="card${folded ? " folded" : ""}" data-task="${esc(task.id)}">
       <div class="cardhead">
-        <div><span class="team">${esc(TEAMS[task.team].name)}</span><h2>${esc(task.title)}</h2></div>
+        <button class="foldbtn" data-act="fold" aria-expanded="${!folded}">
+          <span class="team">${esc(TEAMS[task.team].name)}</span>
+          <h2>${esc(task.title)}</h2>
+          <span class="foldline"><span class="fold-arrow">${folded ? "▸" : "▾"}</span> ${doneN}/${task.items.length} 완료 · ${folded ? "펼치기" : "접기"}</span>
+        </button>
         <button class="link small" data-act="delTask">지우기</button>
       </div>
-      ${task.items.map((it) => itemHtml(task, it)).join("")}
-      <p class="origin">${esc(task.origin)}에서 받음</p>
-    </section>`).join("");
+      ${folded ? "" : task.items.map((it) => itemHtml(task, it)).join("") + `<p class="origin">${esc(task.origin)}에서 받음</p>`}
+    </section>`;
+  }).join("");
+}
+
+// 질문 끝에 'O/X'가 붙은 습관 질문인지 (예: "오늘 폰 다른 방에 두기 지켰나요? O/X")
+function isOX(it) {
+  return it.kind !== "quiz" && /[OＯ○]\s*[\/／]\s*[XＸ×]/i.test(it.q || "");
 }
 
 function itemHtml(task, it) {
@@ -430,6 +443,10 @@ function itemHtml(task, it) {
     ? `<label class="label">내 답 <input class="in" data-field="my" value="${esc(it.my)}" placeholder="예: ③" enterkeyhint="done"></label>
        <label class="label">풀이 (선택)<textarea class="in" data-field="work" rows="3" placeholder="어떻게 풀었는지 적어 두면 복습할 때 좋아요">${esc(it.work)}</textarea></label>
        <button class="btn primary" data-act="submit">답 제출</button>`
+    : isOX(it)
+    // 'O/X' 로 묻는 습관 질문: 버튼 한 번으로 답해요. 메모는 쓰고 싶을 때만.
+    ? `<div class="ox"><button class="btn oxbtn o" data-act="ox" data-v="O">O 지켰어요</button><button class="btn oxbtn x" data-act="ox" data-v="X">X 못 했어요</button></div>
+       <label class="label">메모 (선택)<textarea class="in" data-field="work" rows="2" placeholder="어땠는지 한 줄">${esc(it.work)}</textarea></label>`
     : `<label class="label">답변·기록<textarea class="in" data-field="my" rows="3" placeholder="오늘 한 것, 느낀 점">${esc(it.my)}</textarea></label>
        <button class="btn primary" data-act="submit">완료</button>`;
   return `<div class="item" ${key}>${head}${q}<div class="form">${form}</div>
@@ -538,6 +555,20 @@ document.addEventListener("click", async (ev) => {
     if (it.kind === "quiz") it.correct = judge(it);
     saveData(); markDirty(task.date); render();
     if (it.kind === "quiz" && it.correct !== null) toast(it.correct ? "맞았어요!" : "틀렸어요. 해설을 확인해 보세요.");
+  } else if (act === "ox" && it) {
+    // O/X 버튼: 누르면 바로 완료로 기록 (outbox의 myAnswer에 "O" 또는 "X"로 가요)
+    const w = b.closest(".item").querySelector('[data-field="work"]');
+    it.my = b.dataset.v;
+    if (w) it.work = w.value.trim();
+    it.done = true; it.editing = false;
+    it.doneAt ||= new Date().toISOString();
+    it.late = task.date < today() || it.missed;
+    saveData(); markDirty(task.date); render();
+  } else if (act === "fold" && task) {
+    // 카드 접기/펼치기 (이 폰에만 기억)
+    const doneN = task.items.filter((x) => x.done).length;
+    const now = task.folded ?? (doneN === task.items.length);
+    task.folded = !now; saveData(); render();
   } else if (act === "edit" && it) {
     it.editing = true; it.done = false; render();
   } else if ((act === "markRight" || act === "markWrong") && it) {

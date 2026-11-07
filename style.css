@@ -75,6 +75,16 @@ h3{font-size:15px;margin:18px 0 4px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
 .cardhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
 .team{display:inline-block;font-size:12px;color:var(--accent);font-weight:600}
+/* 카드 접기: 제목 줄 전체가 접기 버튼 */
+.foldbtn{flex:1;min-width:0;text-align:left;background:none;border:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.foldline{font-size:12.5px;color:var(--muted)}
+.fold-arrow{display:inline-block;width:1.1em;font-size:14px;color:var(--accent)}
+.card.folded .cardhead{margin-bottom:0}
+/* O/X 버튼 */
+.ox{display:flex;gap:8px}
+.oxbtn{flex:1;padding:14px 8px;font-size:16px}
+.oxbtn.o{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+.oxbtn.x{border-color:var(--miss);color:var(--miss);background:var(--miss-soft)}
 .item{border-top:1px solid var(--line);padding:12px 0 6px}
 .item:first-of-type{border-top:0}
 .itemhead{display:flex;gap:8px;align-items:center;margin-bottom:6px}
@@ -122,3 +132,4 @@ textarea.in{resize:vertical}
 .pv{padding:3px 0;border-bottom:1px solid var(--line)}
 
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:90vw;text-align:center}
+#tasks{display:flex;flex-direction:column;gap:12px}
