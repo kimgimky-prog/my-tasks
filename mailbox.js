@@ -66,11 +66,20 @@ const Mailbox = (() => {
 
   // 파일 쓰기 (없으면 새로 만들고, 있으면 고쳐요)
   // 고칠 때는 지금 파일의 sha(지문)를 같이 보내야 해서, 먼저 한 번 읽어요.
+  // 두 팀이 같은 순간에 우편함에 올리면 GitHub가 한쪽에 "잠깐, 다시 해"(409 충돌)라고 할 수 있어요.
+  // 파일이 달라서 내용이 섞이거나 덮어써지지는 않고, 잠시 뒤 다시 보내면 돼요. 그래서 최대 3번까지 다시 해요.
   async function writeFile(cfg, path, text, message) {
-    const now = await call(cfg, path);
-    const body = { message, content: toB64(text) };
-    if (now && now.sha) body.sha = now.sha;
-    return call(cfg, path, { method: "PUT", body: JSON.stringify(body) });
+    for (let tryNo = 1; ; tryNo++) {
+      try {
+        const now = await call(cfg, path);
+        const body = { message, content: toB64(text) };
+        if (now && now.sha) body.sha = now.sha;
+        return await call(cfg, path, { method: "PUT", body: JSON.stringify(body) });
+      } catch (e) {
+        if (tryNo >= 3 || !/\((409|422)\)/.test(e.message)) throw e;
+        await new Promise((r) => setTimeout(r, 1500 * tryNo));
+      }
+    }
   }
 
   return { test, listInbox, readFile, writeFile };
