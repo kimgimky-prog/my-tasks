@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- =====================================================================
+  index.html : '나의 과제' 앱의 뼈대 (어떤 칸들이 있는지)
+  ---------------------------------------------------------------------
+  - <head> : 브라우저에게 주는 정보 (제목, 아이콘, 폰에 설치하는 정보)
+  - <body> : 실제 화면. 칸마다 id="..." 이름이 있고, app.js가 그 이름으로
+             칸을 찾아서 내용을 채워요.
+  - 맨 아래 <script> : mailbox.js(우편함 주고받기) → app.js(화면 동작) 순서로 불러와요.
+===================================================================== -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>나의 과제</title>
+<meta name="description" content="팀들이 내 준 오늘의 과제를 한곳에서 풀고 답을 기록하는 앱">
+<meta name="theme-color" content="#14161b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="나의 과제">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <!-- 맨 위: 앱 이름, 날짜 옮기기, 우편함 새로고침, 설정 -->
+  <header class="top">
+    <h1 class="brand">나의 과제</h1>
+    <div class="datenav">
+      <button class="iconbtn" id="prevDay" aria-label="전날">‹</button>
+      <div class="datelabel" id="dateLabel">오늘</div>
+      <button class="iconbtn" id="nextDay" aria-label="다음날">›</button>
+      <button class="iconbtn" id="syncBtn" aria-label="우편함 새로고침">⟳</button>
+      <button class="iconbtn" id="settingsBtn" aria-label="설정">⚙</button>
+    </div>
+  </header>
+  <button class="todaybtn" id="todayBtn" hidden>오늘로 돌아가기</button>
+
+  <!-- 오늘 한눈에 보기: 몇 개 중 몇 개 했는지, 연속 달성일 -->
+  <section class="readout" aria-label="오늘 진행">
+    <div class="sumrow">
+      <div>
+        <div class="label" id="sumLabel">오늘 과제</div>
+        <div class="big" id="sumBig">0<small>/0</small></div>
+      </div>
+      <div class="streak" id="streak"></div>
+    </div>
+    <div class="meter"><i id="meterBar" style="width:0%"></i></div>
+    <p class="syncline" id="syncLine"></p>
+  </section>
+
+  <!-- 팀이 보낸 보고 -->
+  <section id="reportsBox" hidden>
+    <h2>받은 보고</h2>
+    <div id="reports"></div>
+  </section>
+
+  <!-- 과제 카드들 (팀별로 묶여요) -->
+  <div id="tasks"></div>
+</div>
+
+<button class="fab" id="fab">+ 과제 붙여넣기</button>
+
+<!-- 아래에서 올라오는 창 (붙여넣기, 설정) -->
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" id="sheet"></div>
+</div>
+<input type="file" id="importInput" accept="application/json,.json" hidden>
+<div class="toast" id="toast" hidden></div>
+
+<script src="mailbox.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
