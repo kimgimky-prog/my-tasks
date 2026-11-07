@@ -4,7 +4,7 @@
 // ▶ 앱 파일을 고친 뒤에는 아래 VERSION 숫자를 하나 올려 주세요.
 //   그래야 폰에 보관된 옛날 파일 대신 새 파일을 받아요.
 // =====================================================================
-const VERSION = "mytasks-v2";
+const VERSION = "mytasks-v3";
 const FILES = [
   "./", "index.html", "style.css", "mailbox.js", "app.js",
   "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",

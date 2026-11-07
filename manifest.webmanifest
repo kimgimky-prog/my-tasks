@@ -1,5 +1,5 @@
 {
-  "id": "/my-tasks/",
+  "id": "/my-tasks/app",
   "name": "나의 과제",
   "short_name": "나의 과제",
   "description": "팀들이 내 준 오늘의 과제를 한곳에서 풀고 답을 기록하는 앱",
